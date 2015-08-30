@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Handy Fuel</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="title_activity_first_page">Welcome!</string>
+    <string name="welcome_string">Welcome!</string>
+    <string name="title_activity_dispense_fuel">Dispense Fuel</string>
+    <string name="title_activity_dispense_spinner">DispenseSpinner</string>
+
+</resources>
