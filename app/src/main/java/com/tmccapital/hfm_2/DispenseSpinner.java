@@ -14,6 +14,10 @@ public class DispenseSpinner extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Bundle extras = getIntent().getExtras();
+        if (extras != null) {
+            //Stuff goes here
+        }
         setContentView(R.layout.activity_dispense_spinner);
 
         Button log = (Button)findViewById(R.id.disp_spinner_done);
