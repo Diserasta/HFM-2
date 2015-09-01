@@ -153,13 +153,16 @@
             android:layout_marginTop="20dp"
             android:layout_alignParentRight="true" />
 
-        <Spinner
+        <Button
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:id="@+id/dispense_dev_spinner"
-            android:layout_toRightOf="@+id/dispense_device_txt"
+            android:text="Scan for Devices"
+            android:id="@+id/dispense_scan_btn"
+            android:layout_above="@+id/dispense_eq_id_txt"
             android:layout_alignParentRight="true"
-            android:layout_above="@+id/dispense_eq_id_box" />
+            android:layout_alignBaseline="@id/dispense_device_txt"
+            android:layout_toRightOf="@id/dispense_device_txt"/>
+
     </RelativeLayout>
 </ScrollView>
 
