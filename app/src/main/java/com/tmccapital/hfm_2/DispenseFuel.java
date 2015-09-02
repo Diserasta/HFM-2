@@ -119,6 +119,20 @@ public class DispenseFuel extends AppCompatActivity {
                 mBluetoothService.connect(device, false);
 
                 //Begin Data Transfer
+                String tmp = "A45" + "000001" + "0000123456";
+                mBluetoothService.write(tmp.getBytes());
+                tmp = "B310000123400005678";
+                mBluetoothService.write(tmp.getBytes());
+                tmp = "C96-33.769019000000";
+                mBluetoothService.write(tmp.getBytes());
+                tmp = "D85151.030926000000";
+                mBluetoothService.write(tmp.getBytes());
+                tmp = "E620A34567800022222";
+                mBluetoothService.write(tmp.getBytes());
+                tmp = "F130L0K0A0L00000000";
+                mBluetoothService.write(tmp.getBytes());
+                tmp = "H22abcdefghklmnopqr";
+                mBluetoothService.write(tmp.getBytes());
 
 
                 Intent intent = new Intent(DispenseFuel.this, DispenseSpinner.class);
