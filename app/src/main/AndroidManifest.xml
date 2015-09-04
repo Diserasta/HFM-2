@@ -45,9 +45,11 @@
             android:label="@string/title_activity_dispense_spinner" >
         </activity>
         <activity
-            android:name=".ListActivity"
+            android:name=".DeviceListActivity"
             android:label="@string/title_activity_list" >
         </activity>
+
+        <service android:name=".UartService" android:enabled="true"/>
     </application>
 
 </manifest>
