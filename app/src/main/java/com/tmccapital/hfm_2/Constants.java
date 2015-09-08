@@ -1,7 +1,5 @@
 package com.tmccapital.hfm_2;
 
-import android.bluetooth.BluetoothDevice;
-
 /**
  * Created by Sally on 1/09/2015.
  */
