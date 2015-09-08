@@ -107,14 +107,6 @@
         <EditText
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:id="@+id/dispense_eq_id_box"
-            android:layout_alignBaseline="@+id/dispense_eq_id_txt"
-            android:layout_alignParentRight="true"
-            android:layout_toRightOf="@+id/dispense_eq_id_txt" />
-
-        <EditText
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:id="@+id/dispense_make_box"
             android:layout_alignBaseline="@+id/dispense_make_txt"
             android:layout_toLeftOf="@+id/dispense_model_txt"
@@ -132,10 +124,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:id="@+id/dispense_odo_box"
-            android:inputType="number"
             android:layout_alignBaseline="@+id/dispense_odo_txt"
             android:layout_toRightOf="@+id/dispense_odo_txt"
-            android:layout_toLeftOf="@+id/dispense_uom_txt" />
+            android:layout_toLeftOf="@+id/dispense_uom_txt"
+            android:inputType="number" />
         <EditText
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -162,6 +154,14 @@
             android:layout_alignParentRight="true"
             android:layout_alignBaseline="@id/dispense_device_txt"
             android:layout_toRightOf="@id/dispense_device_txt"/>
+
+        <Spinner
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/dispense_eq_id_spinner"
+            android:layout_alignTop="@+id/dispense_eq_id_txt"
+            android:layout_toRightOf="@+id/dispense_eq_id_txt"
+            android:layout_above="@+id/dispense_model_txt" />
 
     </RelativeLayout>
 </ScrollView>
