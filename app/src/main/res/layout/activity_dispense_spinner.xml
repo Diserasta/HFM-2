@@ -11,7 +11,7 @@
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceLarge"
         android:text="Numbers"
-        android:id="@+id/textView4"
+        android:id="@+id/disp_spinner_num"
         android:layout_centerVertical="true"
         android:layout_centerHorizontal="true"
         android:textSize="50sp" />

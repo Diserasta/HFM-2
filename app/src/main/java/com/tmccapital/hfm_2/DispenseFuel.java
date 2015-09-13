@@ -1,14 +1,21 @@
 package com.tmccapital.hfm_2;
 
 
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Message;
-import android.support.v4.app.FragmentActivity;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Menu;
@@ -17,6 +24,7 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.Toast;
 
@@ -28,12 +36,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-public class DispenseFuel extends AppCompatActivity {
+public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnCheckedChangeListener {
 
     public static String getCurrentTimeStamp() {
         SimpleDateFormat sdfDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");//dd/MM/yyyy
@@ -42,6 +51,9 @@ public class DispenseFuel extends AppCompatActivity {
         return strDate;
     }
 
+    private static final int REQUEST_SELECT_DEVICE = 1;
+    private static final int REQUEST_ENABLE_BT = 2;
+
     private Spinner eqID;
     private Button scan_btn;
     private String mConnectedDeviceName = null;
@@ -49,6 +61,7 @@ public class DispenseFuel extends AppCompatActivity {
     private ArrayAdapter<String> mConversationArrayAdapter;
     BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
     BluetoothService mBluetoothService;
+    UartService mUartService;
     Connection mSqlConnect;
     List<String> spinnerArray;
 
@@ -71,8 +84,8 @@ public class DispenseFuel extends AppCompatActivity {
             public void onClick(View view){
                 Intent intent = new Intent(DispenseFuel.this, ListActivity.class);
                 startActivityForResult(intent, 1);
-                String address = intent.getExtras().getString(ListActivity.EXTRA_DEVICE_ADDRESS);
-                mChosenAddress = address;
+                //String address = intent.getExtras().getString(BluetoothDevice.EXTRA_DEVICE);
+                //mChosenAddress = address;
             }
         });
 
@@ -83,6 +96,9 @@ public class DispenseFuel extends AppCompatActivity {
         if (mBluetoothService == null){
             setupBT();
         }
+
+        //Initialise the UartService
+        service_init();
 
         //Initialise the AceQL Library
         String url = "jdbc:aceql:http://hostnamegoeshere:9090/ServerSqlManager";
@@ -132,13 +148,13 @@ public class DispenseFuel extends AppCompatActivity {
                 EditText notes = (EditText) view.findViewById(R.id.dispense_notes_box);
 
                 String transInfo = "Device ID: #####\n"; //Get the MAC or other identifier of the Arduino
-                transInfo = transInfo + "Local Transaction ID: #####\n"; //Given by Arduino
-                transInfo = transInfo + "Remote Transaction ID: ###\n"; //Given by DB
-                transInfo = transInfo + "Equipment ID: " + eqID.getSelectedItem().toString() + "\n";
-                transInfo = transInfo + "Make: " + make.getText().toString() + " Model: " + model.getText().toString() + "\n";
-                transInfo = transInfo + "Odo: " + odo.getText().toString() + " " + uom.getText().toString() + "\n";
-                transInfo = transInfo + "Notes: \n" + notes.getText().toString();
-                transInfo = transInfo + "Attempting Bluetooth Connection\n";
+                //transInfo = transInfo + "Local Transaction ID: #####\n"; //Given by Arduino
+                //transInfo = transInfo + "Remote Transaction ID: ###\n"; //Given by DB
+                //transInfo = transInfo + "Equipment ID: " + eqID.getSelectedItem().toString() + "\n";
+                //transInfo = transInfo + "Make: " + make.getText().toString() + " Model: " + model.getText().toString() + "\n";
+                //transInfo = transInfo + "Odo: " + odo.getText().toString() + " " + uom.getText().toString() + "\n";
+                //transInfo = transInfo + "Notes: \n" + notes.getText().toString();
+                //transInfo = transInfo + "Attempting Bluetooth Connection\n";
 
                 try {
                     FileOutputStream outStream = openFileOutput("log", Context.MODE_PRIVATE);
@@ -152,25 +168,29 @@ public class DispenseFuel extends AppCompatActivity {
 
 
                 //Let's attempt a connection
-                BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mChosenAddress);
-                mBluetoothService.connect(device, false);
+                //BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mChosenAddress);
+                //mBluetoothService.connect(device, false);
+                mUartService.connect(mChosenAddress);
 
                 //Begin Data Transfer
-                String tmp = "A45" + "000001" + "0000123456";
-                mBluetoothService.write(tmp.getBytes());
-                tmp = "B310000123400005678";
-                mBluetoothService.write(tmp.getBytes());
-                tmp = "C96-33.769019000000";
-                mBluetoothService.write(tmp.getBytes());
-                tmp = "D85151.030926000000";
-                mBluetoothService.write(tmp.getBytes());
-                tmp = "E620A34567800022222";
-                mBluetoothService.write(tmp.getBytes());
-                tmp = "F130L0K0A0L00000000";
-                mBluetoothService.write(tmp.getBytes());
-                tmp = "H22abcdefghklmnopqr";
-                mBluetoothService.write(tmp.getBytes());
+                String tmp = "A45" + "000001" + "0000123456\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
+                tmp = "B310000123400005678\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
+                tmp = "C96-33.769019000000\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
+                tmp = "D85151.030926000000\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
+                tmp = "E620334567800022222\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
+                tmp = "F130L0K0A0L00000000\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
+                tmp = "H22abcdefghklmnopqr\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
 
+                //Go cmd goes here
+                tmp = "K07-CMD-GOAUTH00\n";
+                mUartService.writeRXCharacteristic(tmp.getBytes());
 
                 //Let's attempt our transaction
                 try {
@@ -180,7 +200,7 @@ public class DispenseFuel extends AppCompatActivity {
                             13.55, 14.55, 400, 20.00,
                             (short)2,
                             notes.getText().toString());
-                } catch (SQLException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                     Toast.makeText(getApplicationContext(),"Failed  to push data to SQL Server",
                             Toast.LENGTH_SHORT).show();
@@ -189,9 +209,233 @@ public class DispenseFuel extends AppCompatActivity {
 
                 Intent intent = new Intent(DispenseFuel.this, DispenseSpinner.class);
                 DispenseFuel.this.startActivity(intent);
+                tmp = "K07-STOP000000"; //Clear code is K07-CLEAR-ALL0
+                mUartService.writeRXCharacteristic(tmp.getBytes());
             }
         });
     }
+
+
+    //UART service connected/disconnected
+    private ServiceConnection mServiceConnection = new ServiceConnection() {
+        public void onServiceConnected(ComponentName className, IBinder rawBinder) {
+            mUartService = ((UartService.LocalBinder) rawBinder).getService();
+            Log.d(Constants.TAG, "onServiceConnected mService= " + mUartService);
+            if (!mUartService.initialize()) {
+                Log.e(Constants.TAG, "Unable to initialize Bluetooth");
+                finish();
+            }
+
+        }
+
+        public void onServiceDisconnected(ComponentName classname) {
+            ////     mService.disconnect(mDevice);
+            mUartService = null;
+        }
+    };
+
+    private Handler mHandler = new Handler() {
+        @Override
+
+        //Handler events that received from UART service
+        public void handleMessage(Message msg) {
+
+        }
+    };
+
+    private final BroadcastReceiver UARTStatusChangeReceiver = new BroadcastReceiver() {
+
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+
+            final Intent mIntent = intent;
+            //*********************//
+            if (action.equals(UartService.ACTION_GATT_CONNECTED)) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        String currentDateTimeString = DateFormat.getTimeInstance().format(new Date());
+                        Log.d(Constants.TAG, "UART_CONNECT_MSG");
+                        //btnConnectDisconnect.setText("Disconnect");
+                        //edtMessage.setEnabled(true);
+                        //btnSend.setEnabled(true);
+                        //((TextView) findViewById(R.id.deviceName)).setText(mDevice.getName()+ " - ready");
+                        //listAdapter.add("["+currentDateTimeString+"] Connected to: "+ mDevice.getName());
+                        //messageListView.smoothScrollToPosition(listAdapter.getCount() - 1);
+                        //mState = UART_PROFILE_CONNECTED;
+                    }
+                });
+            }
+
+            //*********************//
+            if (action.equals(UartService.ACTION_GATT_DISCONNECTED)) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        //String currentDateTimeString = DateFormat.getTimeInstance().format(new Date());
+                        Log.d(Constants.TAG, "UART_DISCONNECT_MSG");
+                        ///btnConnectDisconnect.setText("Connect");
+                        //edtMessage.setEnabled(false);
+                        //btnSend.setEnabled(false);
+                        //((TextView) findViewById(R.id.deviceName)).setText("Not Connected");
+                        //listAdapter.add("["+currentDateTimeString+"] Disconnected to: "+ mDevice.getName());
+                        //mState = UART_PROFILE_DISCONNECTED;
+                        mUartService.close();
+                        //setUiState();
+
+                    }
+                });
+            }
+
+
+            //*********************//
+            if (action.equals(UartService.ACTION_GATT_SERVICES_DISCOVERED)) {
+                mUartService.enableTXNotification();
+            }
+            //*********************//
+            if (action.equals(UartService.ACTION_DATA_AVAILABLE)) {
+
+                final byte[] txValue = intent.getByteArrayExtra(UartService.EXTRA_DATA);
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        try {
+                            //String text = new String(txValue, "UTF-8");
+                            //String currentDateTimeString = DateFormat.getTimeInstance().format(new Date());
+                            //listAdapter.add("["+currentDateTimeString+"] RX: "+text);
+                            //messageListView.smoothScrollToPosition(listAdapter.getCount() - 1);
+
+                        } catch (Exception e) {
+                            Log.e(Constants.TAG, e.toString());
+                        }
+                    }
+                });
+            }
+            //*********************//
+            if (action.equals(UartService.DEVICE_DOES_NOT_SUPPORT_UART)){
+                showMessage("Device doesn't support UART. Disconnecting");
+                mUartService.disconnect();
+            }
+
+
+        }
+    };
+
+    private void service_init() {
+        Intent bindIntent = new Intent(this, UartService.class);
+        bindService(bindIntent, mServiceConnection, Context.BIND_AUTO_CREATE);
+
+        LocalBroadcastManager.getInstance(this).registerReceiver(UARTStatusChangeReceiver, makeGattUpdateIntentFilter());
+    }
+
+    private static IntentFilter makeGattUpdateIntentFilter() {
+        final IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(UartService.ACTION_GATT_CONNECTED);
+        intentFilter.addAction(UartService.ACTION_GATT_DISCONNECTED);
+        intentFilter.addAction(UartService.ACTION_GATT_SERVICES_DISCOVERED);
+        intentFilter.addAction(UartService.ACTION_DATA_AVAILABLE);
+        intentFilter.addAction(UartService.DEVICE_DOES_NOT_SUPPORT_UART);
+        return intentFilter;
+    }
+    @Override
+    public void onStart() {
+        super.onStart();
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        Log.d(Constants.TAG, "onDestroy()");
+
+        try {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(UARTStatusChangeReceiver);
+        } catch (Exception ignore) {
+            Log.e(Constants.TAG, ignore.toString());
+        }
+        unbindService(mServiceConnection);
+        mUartService.stopSelf();
+        mUartService= null;
+
+    }
+
+    @Override
+    protected void onStop() {
+        Log.d(Constants.TAG, "onStop");
+        super.onStop();
+    }
+
+    @Override
+    protected void onPause() {
+        Log.d(Constants.TAG, "onPause");
+        super.onPause();
+    }
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        Log.d(Constants.TAG, "onRestart");
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        Log.d(Constants.TAG, "onResume");
+        if (!mBluetoothAdapter.isEnabled()) {
+            Log.i(Constants.TAG, "onResume - BT not enabled yet");
+            Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
+        }
+
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        switch (requestCode) {
+
+            case REQUEST_SELECT_DEVICE:
+                //When the DeviceListActivity return, with the selected device address
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    String deviceAddress = data.getStringExtra(BluetoothDevice.EXTRA_DEVICE);
+                    mChosenAddress = deviceAddress;
+
+                    Log.d(Constants.TAG, "... onActivityResultdevice.address==" + mChosenAddress + "mserviceValue" + mUartService);
+                    //((TextView) findViewById(R.id.deviceName)).setText(mDevice.getName()+ " - connecting");
+                    mUartService.connect(deviceAddress);
+
+
+                }
+                break;
+            case REQUEST_ENABLE_BT:
+                // When the request to enable Bluetooth returns
+                if (resultCode == Activity.RESULT_OK) {
+                    Toast.makeText(this, "Bluetooth has turned on ", Toast.LENGTH_SHORT).show();
+
+                } else {
+                    // User did not enable Bluetooth or an error occurred
+                    Log.d(Constants.TAG, "BT not enabled");
+                    Toast.makeText(this, "Problem in BT Turning ON ", Toast.LENGTH_SHORT).show();
+                    finish();
+                }
+                break;
+            default:
+                Log.e(Constants.TAG, "wrong request code");
+                break;
+        }
+    }
+
+    @Override
+    public void onCheckedChanged(RadioGroup group, int checkedId) {
+
+    }
+
+
+    private void showMessage(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+
+    }
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -214,51 +458,6 @@ public class DispenseFuel extends AppCompatActivity {
 
         return super.onOptionsItemSelected(item);
     }
-
-    private final Handler mHandler = new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            FragmentActivity activity = DispenseFuel.this;
-            switch (msg.what) {
-                case Constants.MESSAGE_STATE_CHANGE:
-                    switch (msg.arg1) {
-                        case BluetoothService.STATE_CONNECTED:
-
-                            break;
-                        case BluetoothService.STATE_CONNECTING:
-
-                            break;
-                        case BluetoothService.STATE_LISTEN:
-                        case BluetoothService.STATE_NONE:
-
-                            break;
-                    }
-                    break;
-                case Constants.MESSAGE_WRITE:
-                    byte[] writeBuf = (byte[]) msg.obj;
-                    // construct a string from the buffer
-                    String writeMessage = new String(writeBuf);
-                    mConversationArrayAdapter.add("SEND:  " + writeMessage);
-                    break;
-                case Constants.MESSAGE_READ:
-                    byte[] readBuf = (byte[]) msg.obj;
-                    // construct a string from the valid bytes in the buffer
-                    String readMessage = new String(readBuf, 0, msg.arg1);
-                    mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
-                    break;
-                case Constants.MESSAGE_DEVICE_NAME:
-                    // save the connected device's name
-                    mConnectedDeviceName = msg.getData().getString(Constants.DEVICE_NAME);
-                    Toast.makeText(activity, "Connected to "
-                            + mConnectedDeviceName, Toast.LENGTH_SHORT).show();
-                    break;
-                case Constants.MESSAGE_TOAST:
-                    Toast.makeText(activity, msg.getData().getString(Constants.TOAST),
-                            Toast.LENGTH_SHORT).show();
-                    break;
-            }
-        }
-    };
 
 
     private void setupBT(){
