@@ -11,6 +11,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -64,11 +67,16 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     UartService mUartService;
     Connection mSqlConnect;
     List<String> spinnerArray;
+    Location curr;
 
     /**
      * String buffer for outgoing messages
      */
     private StringBuffer mOutStringBuffer;
+
+    // Acquire a reference to the system Location Manager
+    LocationManager locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -101,9 +109,10 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         service_init();
 
         //Initialise the AceQL Library
-        String url = "jdbc:aceql:http://hostnamegoeshere:9090/ServerSqlManager";
-        String username = "foo";
-        String pwd = "bar";
+        //Make this a setting at some point
+        String url = "jdbc:aceql:http://45.32.243.135:9090/ServerSqlManager";
+        String username = "root";
+        String pwd = "-+Y6b9+%.Y^H"; //*internally screams about security*
         try {
             Class.forName("org.kawanfw.sql.api.client.RemoteDriver");
         } catch (ClassNotFoundException e) {
@@ -134,6 +143,10 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
         eqID.setAdapter(adapter);
 
+        // Register the listener with the Location Manager to receive location updates
+        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
+
+        //What we do when we hit that go button
         Button go = (Button)findViewById(R.id.dispense_disp_btn);
         go.setOnClickListener(new View.OnClickListener() {
 
@@ -146,6 +159,8 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 EditText odo = (EditText) view.findViewById(R.id.dispense_odo_box);
                 EditText uom = (EditText) view.findViewById(R.id.dispense_uom_box);
                 EditText notes = (EditText) view.findViewById(R.id.dispense_notes_box);
+                double gps_lat = curr.getLatitude();
+                double gps_long = curr.getLongitude();
 
                 String transInfo = "Device ID: #####\n"; //Get the MAC or other identifier of the Arduino
                 //transInfo = transInfo + "Local Transaction ID: #####\n"; //Given by Arduino
@@ -175,18 +190,45 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 //Begin Data Transfer
                 String tmp = "A45" + "000001" + "0000123456\n";
                 mUartService.writeRXCharacteristic(tmp.getBytes());
+
                 tmp = "B310000123400005678\n";
                 mUartService.writeRXCharacteristic(tmp.getBytes());
-                tmp = "C96-33.769019000000\n";
+
+                tmp = "C96" + String.valueOf(gps_lat);
+                for (int i = 19 - tmp.length(); i > 0; i--){
+                    tmp += '0';
+                }
+                tmp += '\n';
+                Log.d(Constants.TAG, "GPS Lat is: " + gps_lat + " tmp is: " + tmp);
                 mUartService.writeRXCharacteristic(tmp.getBytes());
-                tmp = "D85151.030926000000\n";
+
+                tmp = "D85" + String.valueOf(gps_long);
+                for (int i = 19 - tmp.length(); i > 0; i--){
+                    tmp += '0';
+                }
+                tmp += '\n';
+                Log.d(Constants.TAG, "GPS Long is: " + gps_long + " tmp is: " + tmp);
                 mUartService.writeRXCharacteristic(tmp.getBytes());
-                tmp = "E620334567800022222\n";
+
+                tmp = "E62" + eqID.getSelectedItem().toString();
+                for (int i = 8 - eqID.getSelectedItem().toString().length(); i > 0; i--){
+                    tmp += '0';
+                }
+                tmp += odo.getText().toString();
+                for (int i = 8 - eqID.getSelectedItem().toString().length(); i > 0; i--){
+                    tmp += '0';
+                }
+                tmp += '\n';
+
                 mUartService.writeRXCharacteristic(tmp.getBytes());
+
                 tmp = "F130L0K0A0L00000000\n";
                 mUartService.writeRXCharacteristic(tmp.getBytes());
+
                 tmp = "H22abcdefghklmnopqr\n";
                 mUartService.writeRXCharacteristic(tmp.getBytes());
+
+
 
                 //Go cmd goes here
                 tmp = "K07-CMD-GOAUTH00\n";
@@ -196,9 +238,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 try {
                     sendOrder(4,1,2, Integer.parseInt(eqID.getSelectedItem().toString()),
                             Integer.parseInt( odo.getText().toString() ),
-                            (short)Integer.parseInt(uom.getText().toString()),
-                            13.55, 14.55, 400, 20.00,
-                            (short)2,
+                            gps_lat, gps_long, 400, 20.00,
                             notes.getText().toString());
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -318,6 +358,21 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         }
     };
 
+    // Define a listener that responds to location updates
+    public LocationListener locationListener = new LocationListener() {
+        public void onLocationChanged(Location location) {
+            // Called when a new location is found by the network location provider.
+            curr = location;
+        }
+
+        public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+        public void onProviderEnabled(String provider) {}
+
+        public void onProviderDisabled(String provider) {}
+    };
+
+
     private void service_init() {
         Intent bindIntent = new Intent(this, UartService.class);
         bindService(bindIntent, mServiceConnection, Context.BIND_AUTO_CREATE);
@@ -358,12 +413,14 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     @Override
     protected void onStop() {
         Log.d(Constants.TAG, "onStop");
+        locationManager.removeUpdates(locationListener);
         super.onStop();
     }
 
     @Override
     protected void onPause() {
         Log.d(Constants.TAG, "onPause");
+        locationManager.removeUpdates(locationListener);
         super.onPause();
     }
 
@@ -382,7 +439,8 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
             Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
         }
-
+        // Register the listener with the Location Manager to receive location updates
+        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
     }
 
     @Override
@@ -480,26 +538,29 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
      */
 
-    public void sendOrder(int customerID,int userID,int deviceID, int eqID, int odo, short uom,
-                          double lat, double longt, int pulse, double vol, short vol_uom,
+    public void sendOrder(int customerID,int userID,int deviceID, int eqID, int odo,
+                          double lat, double longt, int pulse, double vol,
                           String notes) throws SQLException{
-        String sql = "insert into trans_dispense " + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "insert into transactions " + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         PreparedStatement prep = mSqlConnect.prepareStatement(sql);
         short i = 1;
+        long theTime = new java.util.Date().getTime();
+        java.sql.Date theDate = getCurrentDatetime();
 
         prep.setInt(i++, customerID);
         prep.setInt(i++, userID);
         prep.setInt(i++, deviceID);
         prep.setInt(i++, eqID);
         prep.setInt(i++, odo);
-        prep.setShort(i++, uom);
+        prep.setString(i++, notes);
         prep.setDouble(i++, lat);
         prep.setDouble(i++, longt);
+        prep.setDate(i++, theDate);
         prep.setInt(i++, pulse);
         prep.setDouble(i++, vol);
-        prep.setShort(i++, vol_uom);
-        prep.setString(i++, notes);
+
+
 
         prep.executeUpdate();
         prep.close();
@@ -636,5 +697,9 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         // TRANSACTION END
     }
 
+    public java.sql.Date getCurrentDatetime() {
+        java.util.Date today = new java.util.Date();
+        return new java.sql.Date(today.getTime());
+    }
 }
 
