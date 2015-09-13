@@ -18,18 +18,22 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.StrictMode;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.Toast;
+
+import org.kawanfw.sql.api.client.RemoteDriver;
 
 import java.io.FileOutputStream;
 import java.math.BigDecimal;
@@ -59,6 +63,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
     private Spinner eqID;
     private Button scan_btn;
+
     private String mConnectedDeviceName = null;
     private String mChosenAddress;
     private ArrayAdapter<String> mConversationArrayAdapter;
@@ -67,7 +72,17 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     UartService mUartService;
     Connection mSqlConnect;
     List<String> spinnerArray;
-    Location curr;
+    Location currLoc;
+
+    //Initialise all our text boxes
+    EditText make;
+    EditText model;
+    EditText odo;
+    EditText uom;
+    EditText notes;
+
+    ArrayList<EquipmentItem> eqList = new ArrayList<>();
+    EquipmentItem curr;
 
     /**
      * String buffer for outgoing messages
@@ -75,7 +90,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     private StringBuffer mOutStringBuffer;
 
     // Acquire a reference to the system Location Manager
-    LocationManager locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+    LocationManager locationManager;
 
 
     @Override
@@ -83,6 +98,11 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dispense_fuel);
+
+        //Let's fuck with best practises
+        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+
+        StrictMode.setThreadPolicy(policy);
 
         //Let's instantiate our button
         scan_btn = (Button) findViewById(R.id.dispense_scan_btn);
@@ -113,12 +133,22 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         String url = "jdbc:aceql:http://45.32.243.135:9090/ServerSqlManager";
         String username = "root";
         String pwd = "-+Y6b9+%.Y^H"; //*internally screams about security*
+        RemoteDriver aceql = new RemoteDriver();
+
+
         try {
             Class.forName("org.kawanfw.sql.api.client.RemoteDriver");
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
 
+        /**
+        try{
+            DriverManager.registerDriver(aceql);
+        } catch (SQLException e){
+            e.printStackTrace();
+        }
+        **/
         //Let's try and get the remote server
         try {
             mSqlConnect = DriverManager.getConnection(url,username,pwd);
@@ -130,18 +160,54 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
             Log.d(Constants.TAG, "Connection Established!");
         }
 
+        //Retrieve the equipmentlist
+        try {
+            selectEquipment();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        //Instantiate our boxes
+        //Initialise all our text boxes
+        make = (EditText) findViewById(R.id.dispense_make_box);
+        model = (EditText) findViewById(R.id.dispense_model_box);
+        odo = (EditText) findViewById(R.id.dispense_odo_box);
+        uom = (EditText) findViewById(R.id.dispense_uom_box);
+        notes = (EditText) findViewById(R.id.dispense_notes_box);
+
         //Populate our Spinner
         spinnerArray =  new ArrayList<String>();
-        spinnerArray.add("01234556");
-        spinnerArray.add("000001");
+        for (EquipmentItem eq : eqList){
+            spinnerArray.add(eq.name);
+        }
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(
-                this, android.R.layout.simple_spinner_item, spinnerArray);
+        final ArrayAdapter<EquipmentItem> adapter = new ArrayAdapter<EquipmentItem>(
+                this, android.R.layout.simple_spinner_item, eqList);
 
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         eqID = (Spinner) findViewById(R.id.dispense_eq_id_spinner);
 
         eqID.setAdapter(adapter);
+
+        eqID.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                curr = (EquipmentItem) eqID.getSelectedItem();
+                make.setText(curr.make);
+                model.setText(curr.model);
+                uom.setText(curr.uom);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+
+            }
+        });
+
+        //Next
+
+        //Let's start the LocationManager
+        locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
 
         // Register the listener with the Location Manager to receive location updates
         locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
@@ -153,14 +219,8 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
             @Override
             public void onClick(View view) {
 
-                //Initialise all our text boxes
-                EditText make = (EditText) view.findViewById(R.id.dispense_make_box);
-                EditText model = (EditText) view.findViewById(R.id.dispense_model_box);
-                EditText odo = (EditText) view.findViewById(R.id.dispense_odo_box);
-                EditText uom = (EditText) view.findViewById(R.id.dispense_uom_box);
-                EditText notes = (EditText) view.findViewById(R.id.dispense_notes_box);
-                double gps_lat = curr.getLatitude();
-                double gps_long = curr.getLongitude();
+                double gps_lat = currLoc.getLatitude();
+                double gps_long = currLoc.getLongitude();
 
                 String transInfo = "Device ID: #####\n"; //Get the MAC or other identifier of the Arduino
                 //transInfo = transInfo + "Local Transaction ID: #####\n"; //Given by Arduino
@@ -210,7 +270,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 Log.d(Constants.TAG, "GPS Long is: " + gps_long + " tmp is: " + tmp);
                 mUartService.writeRXCharacteristic(tmp.getBytes());
 
-                tmp = "E62" + eqID.getSelectedItem().toString();
+                tmp = "E62" + curr.equipment_id;
                 for (int i = 8 - eqID.getSelectedItem().toString().length(); i > 0; i--){
                     tmp += '0';
                 }
@@ -234,13 +294,17 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 tmp = "K07-CMD-GOAUTH00\n";
                 mUartService.writeRXCharacteristic(tmp.getBytes());
 
+                //curr = (EquipmentItem) eqID.getSelectedItem();
+                Log.d(Constants.TAG, "curr EQID is: " + curr.equipment_id);
                 //Let's attempt our transaction
+                //TODO: DATA VALIDATION ON THE DAMN ODO
+
                 try {
-                    sendOrder(4,1,2, Integer.parseInt(eqID.getSelectedItem().toString()),
+                    sendOrder(4,1,2, (int) curr.equipment_id,
                             Integer.parseInt( odo.getText().toString() ),
                             gps_lat, gps_long, 400, 20.00,
                             notes.getText().toString());
-                } catch (Exception e) {
+                } catch (SQLException e) {
                     e.printStackTrace();
                     Toast.makeText(getApplicationContext(),"Failed  to push data to SQL Server",
                             Toast.LENGTH_SHORT).show();
@@ -362,7 +426,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     public LocationListener locationListener = new LocationListener() {
         public void onLocationChanged(Location location) {
             // Called when a new location is found by the network location provider.
-            curr = location;
+            currLoc = location;
         }
 
         public void onStatusChanged(String provider, int status, Bundle extras) {}
@@ -541,7 +605,8 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     public void sendOrder(int customerID,int userID,int deviceID, int eqID, int odo,
                           double lat, double longt, int pulse, double vol,
                           String notes) throws SQLException{
-        String sql = "insert into transactions " + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "insert into transactions (client_id, user_id, device_id, equipment_id, project_id, odo, notes, gps_lat, gps_long, date_time, pulse, vol)" +
+                "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         PreparedStatement prep = mSqlConnect.prepareStatement(sql);
         short i = 1;
@@ -552,6 +617,10 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         prep.setInt(i++, userID);
         prep.setInt(i++, deviceID);
         prep.setInt(i++, eqID);
+
+        //TODO: Proper implementation of Project ID
+        prep.setInt(i++, 1);
+
         prep.setInt(i++, odo);
         prep.setString(i++, notes);
         prep.setDouble(i++, lat);
@@ -613,35 +682,33 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
      */
 
-    public void selectOrdersForCustomer(int customerId) throws SQLException {
+    public void selectEquipment() throws SQLException {
         // a Select using AceQL:
 
-        String sql = "select * from orderlog where customer_id = ? ";
+        String sql = "select * from equipment "; //TODO: Where client id blah blah fuck
 
         PreparedStatement prepStat = mSqlConnect.prepareStatement(sql);
-        prepStat.setInt(1, customerId);
+        //prepStat.setInt(1, customerId);
 
         ResultSet rs = prepStat.executeQuery();
 
         while (rs.next()) {
-            int customer_id = rs.getInt("customer_id");
-            int item_id = rs.getInt("item_id");
-            String description = rs.getString("description");
-            BigDecimal cost_price = rs.getBigDecimal("cost_price");
-            Date date_placed = rs.getDate("date_placed");
-            Timestamp date_shipped = rs.getTimestamp("date_shipped");
-            boolean is_delivered = rs.getBoolean("is_delivered");
-            int quantity = rs.getInt("quantity");
 
-            System.out.println();
-            System.out.println("customer_id : " + customer_id);
-            System.out.println("item_id     : " + item_id);
-            System.out.println("description : " + description);
-            System.out.println("cost_price  : " + cost_price);
-            System.out.println("date_placed : " + date_placed);
-            System.out.println("date_shipped: " + date_shipped);
-            System.out.println("is_delivered: " + is_delivered);
-            System.out.println("quantity    : " + quantity);
+            int equipment_id = rs.getInt("equipment_id");
+            int client_id = rs.getInt("client_id");
+            String name = rs.getString("name");
+            String desc = rs.getString("description");
+            String make = rs.getString("make");
+            String model = rs.getString("model");
+            double last_odo = rs.getDouble("last_odo");
+            String uom = rs.getString("uom");
+            long capacity = rs.getLong("capacity");
+            boolean preset = rs.getBoolean("preset");
+            long preset_vol = rs.getLong("preset_vol");
+
+            eqList.add(new EquipmentItem(equipment_id, client_id, name, desc, make, model, last_odo,
+                    uom, capacity, preset, preset_vol));
+
         }
 
         prepStat.close();
@@ -700,6 +767,41 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     public java.sql.Date getCurrentDatetime() {
         java.util.Date today = new java.util.Date();
         return new java.sql.Date(today.getTime());
+    }
+
+    private class EquipmentItem {
+
+        public int equipment_id;
+        public int client_id;
+        public String name;
+        public String desc;
+        public String make;
+        public String model;
+        public double last_odo;
+        public String uom;
+        public long capacity;
+        public boolean preset;
+        public long preset_vol;
+
+        public EquipmentItem(){
+
+        }
+
+        public EquipmentItem(int equipment_id, int client_id, String name, String desc, String make,
+                             String model, double last_odo, String uom, long capacity,
+                             boolean preset, long preset_vol){
+            this.equipment_id = equipment_id;
+            this.client_id = client_id;
+            this.name = name;
+            this.desc = desc;
+            this.make = make;
+            this.model = model;
+            this.last_odo = last_odo;
+            this.uom = uom;
+            this.capacity = capacity;
+            this.preset = preset;
+            this.preset_vol = preset_vol;
+        }
     }
 }
 

@@ -1,0 +1,2 @@
+configurations.create("default")
+artifacts.add("default", file('kawanfw-sql-client-android-3.0.jar'))
