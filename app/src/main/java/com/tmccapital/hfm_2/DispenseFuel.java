@@ -68,6 +68,8 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
     private SharedPreferences sharedPrefs;
     private float k_f;
+    private float vol = 0.0f;
+    private int pulses = 0;
 
     private String mConnectedDeviceName = null;
     private String mChosenAddress;
@@ -348,7 +350,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 try {
                     sendOrder(4,1,2, (int) curr.equipment_id,
                             Integer.parseInt( odo.getText().toString() ),
-                            gps_lat, gps_long, 400, 20.00,
+                            gps_lat, gps_long, pulses, vol,
                             notes.getText().toString());
                 } catch (SQLException e) {
                     e.printStackTrace();
@@ -503,9 +505,11 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                             text = text.replaceAll("[^\\d.]", "");
                             float numb;
                             try{
-                                numb = Integer.parseInt(text) * k_f;
-                                Log.d(Constants.TAG, "Pulse Conv - numb is " + numb + " k_f is " + k_f);
-                                mConversationArrayAdapter.add(String.valueOf(numb));
+                                pulses = Integer.parseInt(text);
+                                vol = pulses * k_f;
+                                Log.d(Constants.TAG, "Pulse Conv - vol is " + vol + " k_f is " + k_f);
+
+                                mConversationArrayAdapter.add(String.valueOf(vol));
                             } catch (NumberFormatException e){
                                 e.printStackTrace();
                                 //mConversationArrayAdapter.add(text);
