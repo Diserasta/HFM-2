@@ -10,10 +10,13 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.TextView;
 
+import java.util.ArrayList;
+
 public class DispenseSpinner extends AppCompatActivity {
 
     private UartService mUartService;
     private ArrayAdapter<String> listAdapter;
+    private ArrayList<String> numList = null;
     private TextView numbers;
     //private final Handler h=new Handler();
 
@@ -22,7 +25,7 @@ public class DispenseSpinner extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         Bundle extras = getIntent().getExtras();
         if (extras != null) {
-            //Stuff goes here
+            numList = extras.getStringArrayList("nums");
         }
         setContentView(R.layout.activity_dispense_spinner);
 

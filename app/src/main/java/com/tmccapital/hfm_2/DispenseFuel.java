@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.location.Location;
 import android.location.LocationListener;
@@ -31,6 +32,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.kawanfw.sql.api.client.RemoteDriver;
@@ -64,9 +66,14 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     private Spinner eqID;
     private Button scan_btn;
 
+    private SharedPreferences sharedPrefs;
+    private float k_f;
+
     private String mConnectedDeviceName = null;
     private String mChosenAddress;
-    private ArrayAdapter<String> mConversationArrayAdapter;
+    private boolean fin_flag = false;
+    public ArrayList<String> mConversationArrayAdapter;
+    private DispenseFuel us;
     BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
     BluetoothService mBluetoothService;
     UartService mUartService;
@@ -80,6 +87,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
     EditText odo;
     EditText uom;
     EditText notes;
+    TextView disp_num;
 
     ArrayList<EquipmentItem> eqList = new ArrayList<>();
     EquipmentItem curr;
@@ -99,10 +107,19 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dispense_fuel);
 
+
+        Context context = this;
+        //Get our prefs
+        sharedPrefs = context.getSharedPreferences(getString(R.string.preference_file_key),
+                Context.MODE_PRIVATE);
+        k_f = sharedPrefs.getFloat(getString(R.string.saved_k_factor_key), 1.0f);
+
         //Let's fuck with best practises
         StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
 
         StrictMode.setThreadPolicy(policy);
+
+        us = this;
 
         //Let's instantiate our button
         scan_btn = (Button) findViewById(R.id.dispense_scan_btn);
@@ -127,6 +144,9 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
         //Initialise the UartService
         service_init();
+
+        //Create our conversation adapter
+        mConversationArrayAdapter = new ArrayList<>();
 
         //Initialise the AceQL Library
         //Make this a setting at some point
@@ -189,6 +209,22 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
         eqID.setAdapter(adapter);
 
+        disp_num = (TextView) findViewById(R.id.dispense_num_txt);
+
+        final Handler handler =new Handler();
+        final Runnable r = new Runnable() {
+            public void run() {
+                handler.postDelayed(this, 500);
+
+                if (mConversationArrayAdapter != null && !mConversationArrayAdapter.isEmpty()) {
+                    disp_num.setText(mConversationArrayAdapter.get(
+                            mConversationArrayAdapter.size() - 1));
+                }
+            }
+        };
+        handler.postDelayed(r, 0000);
+        //Incoming format is [trans_id] :: Pulses == num \n
+
         eqID.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
@@ -213,11 +249,17 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
 
         //What we do when we hit that go button
-        Button go = (Button)findViewById(R.id.dispense_disp_btn);
+        final Button go = (Button)findViewById(R.id.dispense_disp_btn);
         go.setOnClickListener(new View.OnClickListener() {
 
             @Override
             public void onClick(View view) {
+
+                if (fin_flag){
+                    mUartService.writeRXCharacteristic("K07-STOP000000\n".getBytes());
+                    fin_flag = false;
+                    us.finish();
+                }
 
                 double gps_lat = currLoc.getLatitude();
                 double gps_long = currLoc.getLongitude();
@@ -270,14 +312,18 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 Log.d(Constants.TAG, "GPS Long is: " + gps_long + " tmp is: " + tmp);
                 mUartService.writeRXCharacteristic(tmp.getBytes());
 
-                tmp = "E62" + curr.equipment_id;
-                for (int i = 8 - eqID.getSelectedItem().toString().length(); i > 0; i--){
+                tmp = "E62";
+                for (int i = 8 - curr.equipment_id; i > 0; i--){
+                    tmp += '0';
+                }
+                tmp += curr.equipment_id;
+
+                for (int i = 8 - odo.getText().length(); i > 0; i--){
                     tmp += '0';
                 }
                 tmp += odo.getText().toString();
-                for (int i = 8 - eqID.getSelectedItem().toString().length(); i > 0; i--){
-                    tmp += '0';
-                }
+
+                Log.d(Constants.TAG, "odo is " + odo.getText().toString() + " , cmd is " + tmp);
                 tmp += '\n';
 
                 mUartService.writeRXCharacteristic(tmp.getBytes());
@@ -310,11 +356,62 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                             Toast.LENGTH_SHORT).show();
                 }
 
+                disp_num.setVisibility(View.VISIBLE);
+                fin_flag = true;
+                //Make heading invisible
+                TextView tmpV = (TextView) findViewById(R.id.dispense_device_txt);
+                tmpV.setVisibility(View.INVISIBLE);
+                //Make eq_id txt invisible
+                tmpV = (TextView) findViewById(R.id.dispense_eq_id_txt);
+                tmpV.setVisibility(View.INVISIBLE);
+                //Make txt
+                tmpV = (TextView) findViewById(R.id.dispense_make_txt);
+                tmpV.setVisibility(View.INVISIBLE);
+                //Model txt
+                tmpV = (TextView) findViewById(R.id.dispense_model_txt);
+                tmpV.setVisibility(View.INVISIBLE);
+                //Odo txt
+                tmpV = (TextView) findViewById(R.id.dispense_odo_txt);
+                tmpV.setVisibility(View.INVISIBLE);
+                //uom txt
+                tmpV = (TextView) findViewById(R.id.dispense_uom_txt);
+                tmpV.setVisibility(View.INVISIBLE);
+                //notes txt
+                tmpV = (TextView) findViewById(R.id.dispense_notes_txt);
+                tmpV.setVisibility(View.INVISIBLE);
+                //And now the edittable boxss
+                //Make box
+                EditText tmpW = (EditText) findViewById(R.id.dispense_make_box);
+                tmpW.setVisibility(View.INVISIBLE);
+                //Model box
+                tmpW = (EditText) findViewById(R.id.dispense_model_box);
+                tmpW.setVisibility(View.INVISIBLE);
+                //Odo Box
+                tmpW = (EditText) findViewById(R.id.dispense_odo_box);
+                tmpW.setVisibility(View.INVISIBLE);
+                //Uom Box
+                tmpW = (EditText) findViewById(R.id.dispense_uom_box);
+                tmpW.setVisibility(View.INVISIBLE);
+                //Notes Box
+                tmpW = (EditText) findViewById(R.id.dispense_notes_box);
+                tmpW.setVisibility(View.INVISIBLE);
 
-                Intent intent = new Intent(DispenseFuel.this, DispenseSpinner.class);
-                DispenseFuel.this.startActivity(intent);
-                tmp = "K07-STOP000000"; //Clear code is K07-CLEAR-ALL0
-                mUartService.writeRXCharacteristic(tmp.getBytes());
+                //And now the damn spinner
+                Spinner spin = (Spinner) findViewById(R.id.dispense_eq_id_spinner);
+                spin.setVisibility(View.INVISIBLE);
+
+                //And the scan button
+                //*begins screaming*
+                Button butts = (Button) findViewById(R.id.dispense_scan_btn);
+                butts.setVisibility(View.INVISIBLE); //huehue
+                go.setText("Finish");
+                //Intent intent = new Intent(DispenseFuel.this, DispenseSpinner.class);
+                //Bundle b = new Bundle();
+                //b.putStringArrayList("nums", mConversationArrayAdapter);
+                //intent.putExtra("nums",b);
+                //DispenseFuel.this.startActivity(intent);
+                //tmp = "K07-STOP000000"; //Clear code is K07-CLEAR-ALL0
+                //mUartService.writeRXCharacteristic(tmp.getBytes());
             }
         });
     }
@@ -401,11 +498,18 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
                 runOnUiThread(new Runnable() {
                     public void run() {
                         try {
-                            //String text = new String(txValue, "UTF-8");
-                            //String currentDateTimeString = DateFormat.getTimeInstance().format(new Date());
-                            //listAdapter.add("["+currentDateTimeString+"] RX: "+text);
-                            //messageListView.smoothScrollToPosition(listAdapter.getCount() - 1);
-
+                            String text = new String(txValue, "UTF-8");
+                            Log.d(Constants.TAG,"Reading TX: " + text);
+                            text = text.replaceAll("[^\\d.]", "");
+                            float numb;
+                            try{
+                                numb = Integer.parseInt(text) * k_f;
+                                Log.d(Constants.TAG, "Pulse Conv - numb is " + numb + " k_f is " + k_f);
+                                mConversationArrayAdapter.add(String.valueOf(numb));
+                            } catch (NumberFormatException e){
+                                e.printStackTrace();
+                                //mConversationArrayAdapter.add(text);
+                            }
                         } catch (Exception e) {
                             Log.e(Constants.TAG, e.toString());
                         }
@@ -471,6 +575,7 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
         unbindService(mServiceConnection);
         mUartService.stopSelf();
         mUartService= null;
+        fin_flag = false;
 
     }
 
@@ -584,8 +689,6 @@ public class DispenseFuel extends AppCompatActivity implements RadioGroup.OnChec
 
     private void setupBT(){
         Log.d(Constants.TAG,"setupBT()");
-
-        mConversationArrayAdapter = new ArrayAdapter<String>(DispenseFuel.this, R.layout.message);
 
         // Initialize the BluetoothChatService to perform bluetooth connections
         mBluetoothService = new BluetoothService(DispenseFuel.this, mHandler);

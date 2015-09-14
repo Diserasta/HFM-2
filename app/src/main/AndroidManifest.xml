@@ -53,7 +53,14 @@
             android:label="@string/title_activity_list" >
         </activity>
 
-        <service android:name=".UartService" android:enabled="true"/>
+        <service
+            android:name=".UartService"
+            android:enabled="true" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:label="@string/title_activity_settings" >
+        </activity>
     </application>
 
 </manifest>

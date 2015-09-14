@@ -27,4 +27,8 @@
     <string name="popup_message">Do you want to quit this Application?</string>
     <string name="popup_yes">YES</string>
     <string name="popup_no">NO</string>
+    <string name="title_activity_settings">SettingsActivity</string>
+
+    <string name="preference_file_key">com.tmccaptial.hfm_2</string>
+    <string name="saved_k_factor_key">k_factor_key</string>
 </resources>
